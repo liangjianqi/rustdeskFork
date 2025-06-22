@@ -1,6 +1,10 @@
 name: Build the flutter version of the RustDesk
 
 on:
+  push:
+    branches:
+      - test
+
   workflow_call:
     inputs:
       upload-artifact:
