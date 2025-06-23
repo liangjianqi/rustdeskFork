@@ -21,6 +21,8 @@ env:
   VERSION: "1.4.0"
   MACOS_P12_BASE64: "${{ secrets.MACOS_P12_BASE64 }}"
   UPLOAD_ARTIFACT: "${{ inputs.upload-artifact }}"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
 
 jobs:
   build-for-macOS:
@@ -42,7 +44,7 @@ jobs:
 
       - name: Install build runtime
         run: |
-          brew install create-dmg
+          brew install llvm create-dmg nasm cmake gcc wget ninja pkg-config
 
       - name: Install flutter
         uses: subosito/flutter-action@v2
@@ -55,14 +57,29 @@ jobs:
         with:
           toolchain: ${{ env.MAC_RUST_VERSION }}
           targets: aarch64-apple-darwin
+          components: "rustfmt"
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
       - name: Build rustdesk
         run: |
+          MIN_MACOS_VERSION="12.3"
+          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET\=[0-9]*.[0-9]*/MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}/" build.py
+          sed -i -e "s/platform :osx, '.*'/platform :osx, '${MIN_MACOS_VERSION}'/" flutter/macos/Podfile
+          sed -i -e "s/osx_minimum_system_version = \"[0-9]*.[0-9]*\"/osx_minimum_system_version = \"${MIN_MACOS_VERSION}\"/" Cargo.toml
+          sed -i -e "s/MACOSX_DEPLOYMENT_TARGET = [0-9]*.[0-9]*;/MACOSX_DEPLOYMENT_TARGET = ${MIN_MACOS_VERSION};/" flutter/macos/Runner.xcodeproj/project.pbxproj
+          export MACOSX_DEPLOYMENT_TARGET=${MIN_MACOS_VERSION}
           ./build.py --flutter --hwcodec --unix-file-copy-paste
 
       - name: create unsigned dmg
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
+          CREATE_DMG="$(command -v create-dmg)"
+          CREATE_DMG="$(readlink -f "$CREATE_DMG")"
+          sed -i -e 's/MAXIMUM_UNMOUNTING_ATTEMPTS=3/MAXIMUM_UNMOUNTING_ATTEMPTS=7/' "$CREATE_DMG"
           create-dmg --icon "RustDesk.app" 200 190 --hide-extension "RustDesk.app" --window-size 800 400 --app-drop-link 600 185 rustdesk-${{ env.VERSION }}-arm64.dmg ./flutter/build/macos/Build/Products/Release/RustDesk.app
 
       - name: Upload unsigned macOS app
