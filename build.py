@@ -476,7 +476,7 @@ def main():
     flutter = args.flutter
     if not flutter:
         system2('python3 res/inline-sciter.py')
-    print(args.skip_cargo)
+    print(f"skip_cargo: {args.skip_cargo}")
     if args.skip_cargo:
         skip_cargo = True
     portable = args.portable
